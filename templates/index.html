@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Travel Itinerary Planner</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">🧭</span>
+      <span class="brand-name">TripCraft AI</span>
+    </div>
+    <div id="ollamaStatus" class="ollama-status" title="Ollama connection status">
+      <span class="dot"></span><span class="status-text">Checking Ollama…</span>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ============ WIZARD ============ -->
+    <section id="wizard" class="wizard card">
+      <div class="progress-track">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div class="progress-steps" id="progressSteps"></div>
+
+      <form id="wizardForm">
+
+        <!-- Step 1: Destination -->
+        <div class="step" data-step="1">
+          <h2>Where do you want to go?</h2>
+          <p class="step-sub">Enter a city, region, or country.</p>
+          <input type="text" id="destination" placeholder="e.g. Kyoto, Japan" autocomplete="off" required>
+        </div>
+
+        <!-- Step 2: Duration -->
+        <div class="step" data-step="2">
+          <h2>How many days?</h2>
+          <p class="step-sub">Total length of the trip.</p>
+          <div class="stepper">
+            <button type="button" class="stepper-btn" id="durationMinus">−</button>
+            <input type="number" id="duration" min="1" max="30" value="5" required>
+            <button type="button" class="stepper-btn" id="durationPlus">+</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Budget -->
+        <div class="step" data-step="3">
+          <h2>What's your budget?</h2>
+          <p class="step-sub">Pick the category closest to your plans.</p>
+          <div class="option-grid" data-field="budget">
+            <button type="button" class="option-card" data-value="Budget">💸<span>Budget</span></button>
+            <button type="button" class="option-card" data-value="Mid-range">💰<span>Mid-range</span></button>
+            <button type="button" class="option-card" data-value="Luxury">💎<span>Luxury</span></button>
+          </div>
+        </div>
+
+        <!-- Step 4: Traveler type -->
+        <div class="step" data-step="4">
+          <h2>Who's traveling?</h2>
+          <div class="option-grid" data-field="traveler_type">
+            <button type="button" class="option-card" data-value="Solo">🧍<span>Solo</span></button>
+            <button type="button" class="option-card" data-value="Couple">💑<span>Couple</span></button>
+            <button type="button" class="option-card" data-value="Family">👨‍👩‍👧‍👦<span>Family</span></button>
+            <button type="button" class="option-card" data-value="Friends group">🧑‍🤝‍🧑<span>Friends</span></button>
+          </div>
+        </div>
+
+        <!-- Step 5: Pace -->
+        <div class="step" data-step="5">
+          <h2>What pace do you prefer?</h2>
+          <div class="option-grid" data-field="pace">
+            <button type="button" class="option-card" data-value="Relaxed">🐢<span>Relaxed</span></button>
+            <button type="button" class="option-card" data-value="Balanced">🚶<span>Balanced</span></button>
+            <button type="button" class="option-card" data-value="Fast-paced">🏃<span>Fast-paced</span></button>
+          </div>
+        </div>
+
+        <!-- Step 6: Interests -->
+        <div class="step" data-step="6">
+          <h2>What are you into?</h2>
+          <p class="step-sub">Select all that apply.</p>
+          <div class="option-grid multi" data-field="interests" data-multi="true">
+            <button type="button" class="option-card" data-value="Food">🍜<span>Food</span></button>
+            <button type="button" class="option-card" data-value="Nature">🌿<span>Nature</span></button>
+            <button type="button" class="option-card" data-value="History">🏛️<span>History</span></button>
+            <button type="button" class="option-card" data-value="Adventure">🧗<span>Adventure</span></button>
+            <button type="button" class="option-card" data-value="Art & Culture">🎨<span>Art &amp; Culture</span></button>
+            <button type="button" class="option-card" data-value="Nightlife">🌃<span>Nightlife</span></button>
+            <button type="button" class="option-card" data-value="Shopping">🛍️<span>Shopping</span></button>
+            <button type="button" class="option-card" data-value="Relaxation">🧘<span>Relaxation</span></button>
+          </div>
+        </div>
+
+        <!-- Step 7: Notes (optional) -->
+        <div class="step" data-step="7">
+          <h2>Anything else we should know?</h2>
+          <p class="step-sub">Optional — dietary needs, mobility, must-see spots, avoid crowds, etc.</p>
+          <textarea id="notes" rows="4" placeholder="e.g. traveling with a toddler, vegetarian food only, want to avoid tourist traps..."></textarea>
+        </div>
+
+        <!-- Step 8: Review -->
+        <div class="step" data-step="8">
+          <h2>Ready to craft your trip</h2>
+          <p class="step-sub">Review your choices, then generate your itinerary.</p>
+          <div id="reviewSummary" class="review-summary"></div>
+        </div>
+
+      </form>
+
+      <div id="wizardError" class="error-banner" style="display:none;"></div>
+
+      <div class="wizard-nav">
+        <button type="button" id="prevBtn" class="btn btn-ghost">Back</button>
+        <button type="button" id="nextBtn" class="btn btn-primary">Next</button>
+        <button type="button" id="generateBtn" class="btn btn-primary" style="display:none;">✨ Generate Itinerary</button>
+      </div>
+    </section>
+
+    <!-- ============ LOADING ============ -->
+    <section id="loading" class="loading card" style="display:none;">
+      <div class="spinner"></div>
+      <p id="loadingText">Crafting your itinerary with AI…</p>
+      <p class="loading-sub">This can take a little while on local models — hang tight.</p>
+    </section>
+
+    <!-- ============ RESULTS ============ -->
+    <section id="results" class="results" style="display:none;">
+      <div class="results-header card">
+        <div>
+          <h2 id="resultTitle">Your Itinerary</h2>
+          <p id="resultSummary" class="result-summary"></p>
+        </div>
+        <div class="results-actions">
+          <button id="downloadPdfBtn" class="btn btn-secondary">⬇️ Save as PDF</button>
+          <button id="startOverBtn" class="btn btn-ghost">↺ Start Over</button>
+        </div>
+      </div>
+
+      <div id="daysContainer" class="days-container"></div>
+
+      <div id="tipsCard" class="card tips-card" style="display:none;">
+        <h3>💡 Good to know</h3>
+        <ul id="tipsList"></ul>
+      </div>
+
+      <div class="card customize-card">
+        <h3>🔧 Want to tweak it?</h3>
+        <p class="step-sub">Tell the AI what to change — it'll regenerate your full itinerary.</p>
+        <div class="customize-examples">
+          <button type="button" class="chip">Make day 2 more relaxed</button>
+          <button type="button" class="chip">Add more local food spots</button>
+          <button type="button" class="chip">Swap in a free/low-cost day</button>
+          <button type="button" class="chip">Add a half-day trip nearby</button>
+        </div>
+        <div class="customize-input-row">
+          <input type="text" id="customizeInput" placeholder="e.g. Replace the museum on day 3 with something outdoors">
+          <button id="customizeBtn" class="btn btn-primary">Apply</button>
+        </div>
+        <div id="customizeError" class="error-banner" style="display:none;"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    Built with Flask + Ollama · Runs your own local LLM
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
