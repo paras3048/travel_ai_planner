@@ -636,6 +636,9 @@ def http_error_message(e):
         return f"Ollama Cloud rejected the request (HTTP {status}). Check that OLLAMA_API_KEY is set correctly (create one at ollama.com/settings/keys)."
     if status == 404:
         return f"Model '{OLLAMA_MODEL}' was not found. Check the model name (see ollama.com for available cloud models)."
+    if status == 402:
+        return ("The AI usage allowance for this site has run out for now (Ollama Cloud HTTP 402). "
+                "Please try again later. Site owner: check your balance and plan at ollama.com.")
     if status == 429:
         return "Ollama Cloud rate limit reached. Wait a bit and try again, or check your usage at ollama.com."
     return f"Ollama returned an error (HTTP {status})."

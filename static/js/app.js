@@ -119,10 +119,11 @@ async function checkOllamaStatus() {
   try {
     const res = await fetch("/api/health");
     const data = await res.json();
-    els.ollamaStatus.classList.toggle("online", data.ollama_reachable);
-    els.ollamaStatus.classList.toggle("offline", !data.ollama_reachable);
-    els.ollamaStatus.title = `Model: ${data.model}`;
-    if (data.ollama_reachable) text.textContent = "AI ready";
+    const ok = data.ai_available ?? data.ollama_reachable;
+    els.ollamaStatus.classList.toggle("online", ok);
+    els.ollamaStatus.classList.toggle("offline", !ok);
+    els.ollamaStatus.title = `Model: ${data.model}${data.backup_provider ? ` (backup: ${data.backup_provider})` : ""}`;
+    if (ok) text.textContent = "AI ready";
     else text.textContent = data.using_cloud && !data.api_key_set ? "AI offline — API key missing" : "AI offline";
   } catch {
     els.ollamaStatus.classList.add("offline");
