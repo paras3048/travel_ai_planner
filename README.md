@@ -28,6 +28,26 @@ travel-planner/
     └── js/app.js
 ```
 
+
+## ✨ What's new (v2)
+
+| Area | Change |
+|---|---|
+| **Design** | Light, Airbnb-inspired UI (coral accent, rounded cards, sticky header), fully responsive, print-friendly |
+| **Wizard** | 9 steps incl. origin city, start date, number of travelers, stay type and local transport; Enter to advance, clickable step dots, click-to-edit review, draft auto-saved |
+| **Destination ideas** | "Not sure where to go?" suggests 6 destinations from interests + travel month + region + origin (`POST /api/suggest-destinations`) |
+| **Getting there** | Compares flight / train / bus / car with duration and fare per person; local transport options with typical fares |
+| **Stays & deals** | 3 stay suggestions; destination-specific money-saving deals; pre-filled deep links to Google Flights, Booking.com, Airbnb, GetYourGuide, train/bus search |
+| **Live progress** | Streaming generation (`/stream` endpoints, NDJSON) with "Planning day 3 of 5…", elapsed timer and Cancel |
+| **Editing** | "Replan day" regenerates one day only (`POST /api/regenerate-day`); Undo for every change |
+| **Saving & export** | Trips saved in the browser ("My trips"); PDF, calendar (.ics) and copy-as-text export; Google Maps link per place and per-day route |
+| **Autocomplete** | Destination/origin suggestions as you type: built-in popular list + worldwide places from the free Photon geocoder (OpenStreetMap), keyboard navigable |
+| **Trip toolkit tabs** | Itinerary · Travel & stay · Weather (real forecast / same-dates-last-year via Open-Meteo) · Budget & split (spending tracker, Splitwise-style settle-up, live currency converter) · Packing (AI checklist, weather-aware) · Essentials (visa, emergency numbers, phrases, plugs, SIM, apps, safety) · Ask AI (streaming chat about your trip) |
+| **Sharing** | Share link encodes the whole trip in the URL (no database needed); mark activities done or remove them |
+| **Reliability** | `gunicorn.conf.py` (threaded workers, 300s timeout) fixes Render's 30s WORKER TIMEOUT on long generations; input validation, 1 MB request cap, auto-retry on malformed AI JSON |
+
+> Fares, prices and deals are AI estimates, not live quotes — the deal links open real booking sites with your dates pre-filled.
+
 ---
 
 ## 1. Get a free Ollama Cloud API key
@@ -90,7 +110,8 @@ reachable and whether it detected your API key.
 
 ## 3. How the app is structured (quick tour)
 
-- `app.py` exposes three endpoints:
+- `app.py` also exposes `/api/suggest-destinations`, `/api/regenerate-day`, `/api/essentials`, `/api/packing-list` and `/api/chat/stream`. Weather, currency rates and place search are called directly from the browser (free, no API keys).
+- `app.py` exposes three core endpoints:
   - `GET /api/health` — checks if Ollama is reachable and reports cloud vs. local mode, used for the status badge
   - `POST /api/generate-itinerary` — takes your wizard answers, prompts the model
     with a strict, detailed JSON schema, and returns a structured itinerary
@@ -151,7 +172,7 @@ way):
 3. Pick your repo.
 4. Configure:
    - **Build command**: `pip install -r requirements.txt`
-   - **Start command**: `gunicorn app:app` (already provided via `Procfile`)
+   - **Start command**: `gunicorn app:app` (already provided via `Procfile`; worker/timeout settings are picked up automatically from `gunicorn.conf.py`)
    - **Environment variables** — this is where the key goes. In Render's
      dashboard, open the **Environment** tab and add:
      - `OLLAMA_HOST` → `https://ollama.com`

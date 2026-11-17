@@ -3,33 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Travel Itinerary Planner</title>
+<title>TripCraft AI — AI Travel Itinerary Planner</title>
+<meta name="description" content="Plan a detailed, day-by-day travel itinerary in seconds with AI. Pick a destination, budget and interests, then refine it conversationally.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
 <div class="app-shell">
 
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-icon">🧭</span>
-      <span class="brand-name">TripCraft AI</span>
-    </div>
+    <div class="topbar-inner">
+    <a class="brand" href="/" aria-label="TripCraft AI home" title="TripCraft AI">
+      <span class="brand-icon" aria-hidden="true">🧭</span>
+    </a>
+    <div class="topbar-right">
+    <button type="button" id="myTripsBtn" class="btn btn-ghost btn-sm" style="display:none;">🗂 My trips <span id="tripCount" class="count-badge"></span></button>
     <div id="ollamaStatus" class="ollama-status" title="Ollama connection status">
-      <span class="dot"></span><span class="status-text">Checking Ollama…</span>
+      <span class="dot"></span><span class="status-text">Checking AI…</span>
+    </div>
+    </div>
     </div>
   </header>
 
   <main class="main">
+
+    <div class="hero" id="hero">
+      <h1>Plan your next trip, <span>day by day</span></h1>
+      <p>Tell us where and how you like to travel. We'll build a detailed itinerary with places, meals and costs.</p>
+    </div>
 
     <!-- ============ WIZARD ============ -->
     <section id="wizard" class="wizard card">
       <div class="progress-track">
         <div id="progressBar" class="progress-bar"></div>
       </div>
-      <div class="progress-steps" id="progressSteps"></div>
+      <div class="progress-head">
+        <ol class="step-dots" id="stepDots" aria-label="Wizard steps"></ol>
+        <div class="progress-steps" id="progressSteps"></div>
+      </div>
 
       <form id="wizardForm">
 
@@ -37,17 +52,85 @@
         <div class="step" data-step="1">
           <h2>Where do you want to go?</h2>
           <p class="step-sub">Enter a city, region, or country.</p>
-          <input type="text" id="destination" placeholder="e.g. Kyoto, Japan" autocomplete="off" required>
+          <div class="ac-wrap"><input type="text" id="destination" placeholder="Search destinations — e.g. Kyoto, Goa, Swiss Alps" autocomplete="off" maxlength="120" required role="combobox" aria-autocomplete="list" aria-expanded="false"></div>
+          <div class="suggestions" id="destSuggestions" aria-label="Popular destinations">
+            <button type="button" class="chip dest-chip">Goa, India</button>
+            <button type="button" class="chip dest-chip">Kyoto, Japan</button>
+            <button type="button" class="chip dest-chip">Bali, Indonesia</button>
+            <button type="button" class="chip dest-chip">Paris, France</button>
+            <button type="button" class="chip dest-chip">Jaipur, India</button>
+            <button type="button" class="chip dest-chip">Istanbul, Türkiye</button>
+            <button type="button" class="chip dest-chip">🎲 Surprise me</button>
+          </div>
+
+          <button type="button" id="ideasToggle" class="ideas-toggle">
+            <span class="ideas-icon">✨</span>
+            <span><strong>Not sure where to go?</strong><br><small>Get destination ideas based on your interests and travel month</small></span>
+            <span class="ideas-chev">›</span>
+          </button>
+          <div id="ideasPanel" class="ideas-panel" hidden>
+            <div class="ideas-filters">
+              <label class="field">
+                <span class="field-label">Travel month</span>
+                <select id="ideasMonth"></select>
+              </label>
+              <label class="field">
+                <span class="field-label">Region</span>
+                <select id="ideasRegion">
+                  <option value="">Anywhere</option>
+                  <option>Within India</option>
+                  <option>South-East Asia</option>
+                  <option>East Asia</option>
+                  <option>Middle East</option>
+                  <option>Europe</option>
+                  <option>Africa</option>
+                  <option>The Americas</option>
+                  <option>Oceania</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field-label">Starting from</span>
+                <div class="ac-wrap"><input type="text" id="ideasOrigin" placeholder="e.g. New Delhi" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"></div>
+              </label>
+            </div>
+            <span class="field-label">Interests</span>
+            <div class="suggestions" id="ideasInterests"></div>
+            <button type="button" id="ideasBtn" class="btn btn-primary btn-sm ideas-go">Find destinations</button>
+            <div id="ideasError" class="error-banner" style="display:none;"></div>
+            <div id="ideasResults" class="ideas-results"></div>
+          </div>
         </div>
 
         <!-- Step 2: Duration -->
         <div class="step" data-step="2">
-          <h2>How many days?</h2>
-          <p class="step-sub">Total length of the trip.</p>
-          <div class="stepper">
-            <button type="button" class="stepper-btn" id="durationMinus">−</button>
-            <input type="number" id="duration" min="1" max="30" value="5" required>
-            <button type="button" class="stepper-btn" id="durationPlus">+</button>
+          <h2>When &amp; how long?</h2>
+          <p class="step-sub">Dates are optional, but they let the AI account for season, weather and opening days.</p>
+          <div class="field-grid">
+            <label class="field field-wide">
+              <span class="field-label">Starting from <em>(optional, adds travel time &amp; fares)</em></span>
+              <div class="ac-wrap"><input type="text" id="origin" placeholder="e.g. New Delhi" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"></div>
+            </label>
+            <label class="field">
+              <span class="field-label">Number of days</span>
+              <div class="stepper">
+                <button type="button" class="stepper-btn" id="durationMinus" aria-label="Fewer days">−</button>
+                <input type="number" id="duration" min="1" max="30" value="5" required>
+                <button type="button" class="stepper-btn" id="durationPlus" aria-label="More days">+</button>
+              </div>
+            </label>
+            <label class="field">
+              <span class="field-label">Start date <em>(optional)</em></span>
+              <input type="date" id="startDate">
+              <span class="field-hint" id="endDateHint"></span>
+            </label>
+            <label class="field">
+              <span class="field-label">Travelers</span>
+              <div class="stepper">
+                <button type="button" class="stepper-btn" id="travelersMinus" aria-label="Fewer travelers">−</button>
+                <input type="number" id="travelers" min="1" max="20" value="1">
+                <button type="button" class="stepper-btn" id="travelersPlus" aria-label="More travelers">+</button>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -99,18 +182,40 @@
           </div>
         </div>
 
-        <!-- Step 7: Notes (optional) -->
+        <!-- Step 7: Stay & getting around -->
         <div class="step" data-step="7">
-          <h2>Anything else we should know?</h2>
-          <p class="step-sub">Optional — dietary needs, mobility, must-see spots, avoid crowds, etc.</p>
-          <textarea id="notes" rows="4" placeholder="e.g. traveling with a toddler, vegetarian food only, want to avoid tourist traps..."></textarea>
+          <h2>Where will you stay and how will you get around?</h2>
+          <p class="step-sub">Optional. We'll suggest stays, compare transport options and include fares.</p>
+          <span class="field-label">Stay</span>
+          <div class="option-grid compact" data-field="accommodation" data-optional="true">
+            <button type="button" class="option-card" data-value="Hostel">🛏️<span>Hostel</span></button>
+            <button type="button" class="option-card" data-value="Hotel">🏨<span>Hotel</span></button>
+            <button type="button" class="option-card" data-value="Homestay">🏡<span>Homestay</span></button>
+            <button type="button" class="option-card" data-value="Resort">🌴<span>Resort</span></button>
+            <button type="button" class="option-card" data-value="Apartment / Airbnb">🔑<span>Apartment</span></button>
+          </div>
+          <span class="field-label" style="display:block;margin-top:22px;">Getting around</span>
+          <div class="option-grid compact" data-field="local_transport" data-optional="true">
+            <button type="button" class="option-card" data-value="Public transport">🚇<span>Public transport</span></button>
+            <button type="button" class="option-card" data-value="Cabs / taxi apps">🚕<span>Cabs</span></button>
+            <button type="button" class="option-card" data-value="Self-drive / scooter rental">🛵<span>Self-drive</span></button>
+            <button type="button" class="option-card" data-value="Walking & cycling">🚶<span>Walk / cycle</span></button>
+          </div>
         </div>
 
-        <!-- Step 8: Review -->
+        <!-- Step 8: Notes (optional) -->
         <div class="step" data-step="8">
+          <h2>Anything else we should know?</h2>
+          <p class="step-sub">Optional — dietary needs, mobility, must-see spots, avoid crowds, etc.</p>
+          <textarea id="notes" rows="4" maxlength="1000" placeholder="e.g. traveling with a toddler, vegetarian food only, want to avoid tourist traps..."></textarea>
+        </div>
+
+        <!-- Step 9: Review -->
+        <div class="step" data-step="9">
           <h2>Ready to craft your trip</h2>
           <p class="step-sub">Review your choices, then generate your itinerary.</p>
           <div id="reviewSummary" class="review-summary"></div>
+          <p class="field-hint">Tip: click any row to edit it.</p>
         </div>
 
       </form>
@@ -118,8 +223,9 @@
       <div id="wizardError" class="error-banner" style="display:none;"></div>
 
       <div class="wizard-nav">
-        <button type="button" id="prevBtn" class="btn btn-ghost">Back</button>
-        <button type="button" id="nextBtn" class="btn btn-primary">Next</button>
+        <button type="button" id="prevBtn" class="btn btn-ghost">← Back</button>
+        <span class="kbd-hint">Press <kbd>Enter</kbd> to continue</span>
+        <button type="button" id="nextBtn" class="btn btn-primary">Next →</button>
         <button type="button" id="generateBtn" class="btn btn-primary" style="display:none;">✨ Generate Itinerary</button>
       </div>
     </section>
@@ -127,8 +233,11 @@
     <!-- ============ LOADING ============ -->
     <section id="loading" class="loading card" style="display:none;">
       <div class="spinner"></div>
-      <p id="loadingText">Crafting your itinerary with AI…</p>
-      <p class="loading-sub">This can take a little while on local models — hang tight.</p>
+      <p id="loadingText" class="loading-title">Crafting your itinerary with AI…</p>
+      <div class="gen-track"><div id="genBar" class="gen-bar"></div></div>
+      <p id="loadingStage" class="loading-sub" aria-live="polite">Contacting the AI…</p>
+      <p class="loading-sub"><span id="loadingTimer">0s</span> elapsed · detailed plans usually take 30–90s</p>
+      <button type="button" id="cancelBtn" class="btn btn-ghost btn-sm">Cancel</button>
     </section>
 
     <!-- ============ RESULTS ============ -->
@@ -136,24 +245,37 @@
       <div class="results-header card">
         <div>
           <h2 id="resultTitle">Your Itinerary</h2>
+          <div id="resultBadges" class="badges"></div>
           <p id="resultSummary" class="result-summary"></p>
+          <p id="resultTotal" class="result-total"></p>
         </div>
         <div class="results-actions">
-          <button id="downloadPdfBtn" class="btn btn-secondary">⬇️ Save as PDF</button>
-          <button id="startOverBtn" class="btn btn-ghost">↺ Start Over</button>
+          <button id="downloadPdfBtn" class="btn btn-secondary btn-sm">⬇️ PDF</button>
+          <button id="icsBtn" class="btn btn-secondary btn-sm" title="Add each activity to Google/Apple/Outlook calendar">📅 Calendar</button>
+          <button id="shareBtn" class="btn btn-secondary btn-sm">🔗 Share</button>
+          <button id="copyBtn" class="btn btn-secondary btn-sm">📋 Copy text</button>
+          <button id="undoBtn" class="btn btn-ghost btn-sm" disabled>↶ Undo</button>
+          <button id="startOverBtn" class="btn btn-ghost btn-sm">＋ New trip</button>
         </div>
       </div>
 
-      <div id="daysContainer" class="days-container"></div>
+      <nav class="tabs" id="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="plan" role="tab">🗓 Itinerary</button>
+        <button type="button" class="tab" data-tab="travel" role="tab">✈️ Travel &amp; stay</button>
+        <button type="button" class="tab" data-tab="weather" role="tab">🌤 Weather</button>
+        <button type="button" class="tab" data-tab="budget" role="tab">💰 Budget &amp; split</button>
+        <button type="button" class="tab" data-tab="packing" role="tab">🎒 Packing</button>
+        <button type="button" class="tab" data-tab="essentials" role="tab">🛂 Essentials</button>
+        <button type="button" class="tab" data-tab="chat" role="tab">💬 Ask AI</button>
+      </nav>
 
-      <div id="tipsCard" class="card tips-card" style="display:none;">
-        <h3>💡 Good to know</h3>
-        <ul id="tipsList"></ul>
-      </div>
+      <div class="tab-panel active" data-panel="plan">
+      <nav id="dayNav" class="day-nav" aria-label="Jump to day"></nav>
+      <div id="daysContainer" class="days-container"></div>
 
       <div class="card customize-card">
         <h3>🔧 Want to tweak it?</h3>
-        <p class="step-sub">Tell the AI what to change — it'll regenerate your full itinerary.</p>
+        <p class="step-sub">Describe a change for the whole trip, or use “↻ Replan” on a single day for a faster edit.</p>
         <div class="customize-examples">
           <button type="button" class="chip">Make day 2 more relaxed</button>
           <button type="button" class="chip">Add more local food spots</button>
@@ -161,21 +283,83 @@
           <button type="button" class="chip">Add a half-day trip nearby</button>
         </div>
         <div class="customize-input-row">
-          <input type="text" id="customizeInput" placeholder="e.g. Replace the museum on day 3 with something outdoors">
+          <input type="text" id="customizeInput" maxlength="500" placeholder="e.g. Replace the museum on day 3 with something outdoors">
           <button id="customizeBtn" class="btn btn-primary">Apply</button>
         </div>
         <div id="customizeError" class="error-banner" style="display:none;"></div>
       </div>
+      </div>
+
+      <div class="tab-panel" data-panel="travel">
+        <section id="logisticsSection" class="logistics"></section>
+      </div>
+
+      <div class="tab-panel" data-panel="weather">
+        <div id="weatherPanel" class="panel-body"></div>
+      </div>
+
+      <div class="tab-panel" data-panel="budget">
+        <div id="budgetPanel" class="panel-body"></div>
+      </div>
+
+      <div class="tab-panel" data-panel="packing">
+        <div id="packingPanel" class="panel-body"></div>
+      </div>
+
+      <div class="tab-panel" data-panel="essentials">
+        <div id="essentialsPanel" class="panel-body"></div>
+        <div id="tipsCard" class="card tips-card" style="display:none;">
+          <h3>💡 Good to know</h3>
+          <ul id="tipsList"></ul>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="chat">
+        <div class="chat-card">
+          <div id="chatLog" class="chat-log" aria-live="polite"></div>
+          <div id="chatSuggest" class="chat-suggest"></div>
+          <form id="chatForm" class="chat-form">
+            <input type="text" id="chatInput" maxlength="1000" placeholder="Ask anything about this trip…" autocomplete="off">
+            <button type="submit" id="chatSend" class="btn btn-primary">Send</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ MY TRIPS ============ -->
+    <section id="tripsPanel" class="card trips-panel" style="display:none;">
+      <div class="trips-head">
+        <h3>🗂 My trips</h3>
+        <button type="button" id="closeTripsBtn" class="btn btn-ghost btn-sm">Close</button>
+      </div>
+      <p class="step-sub">Saved automatically in this browser.</p>
+      <div id="tripsList" class="trips-list"></div>
     </section>
 
   </main>
 
+  <dialog id="dayDialog" class="dialog">
+    <form method="dialog" id="dayForm">
+      <h3 id="dayDialogTitle">Replan day</h3>
+      <p class="step-sub">Optional: say what you want instead. Leave empty for a fresh alternative.</p>
+      <input type="text" id="dayInstruction" maxlength="500" placeholder="e.g. more outdoors, fewer museums, finish by 6pm">
+      <div class="dialog-actions">
+        <button value="cancel" class="btn btn-ghost btn-sm" formnovalidate>Cancel</button>
+        <button value="ok" id="dayDialogOk" class="btn btn-primary btn-sm">↻ Replan day</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
   <footer class="footer">
-    Built with Flask + Ollama · Runs your own local LLM
+    Built with Flask + Ollama · AI suggestions can be outdated — check opening hours &amp; prices before you go
   </footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/autocomplete.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/features.js') }}"></script>
 </body>
 </html>
