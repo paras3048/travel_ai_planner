@@ -44,6 +44,7 @@ travel-planner/
 | **Autocomplete** | Destination/origin suggestions as you type: built-in popular list + worldwide places from the free Photon geocoder (OpenStreetMap), keyboard navigable |
 | **Trip toolkit tabs** | Itinerary · Travel & stay · Weather (real forecast / same-dates-last-year via Open-Meteo) · Budget & split (spending tracker, Splitwise-style settle-up, live currency converter) · Packing (AI checklist, weather-aware) · Essentials (visa, emergency numbers, phrases, plugs, SIM, apps, safety) · Ask AI (streaming chat about your trip) |
 | **Sharing** | Share link encodes the whole trip in the URL (no database needed); mark activities done or remove them |
+| **Backup AI** | Optional `GROQ_API_KEY` (free at console.groq.com): if Ollama returns 402/429/5xx or is down, the app retries on Groq automatically. `AI_PROVIDER=groq` makes Groq primary; `GROQ_MODEL` picks the model |
 | **Reliability** | `gunicorn.conf.py` (threaded workers, 300s timeout) fixes Render's 30s WORKER TIMEOUT on long generations; input validation, 1 MB request cap, auto-retry on malformed AI JSON |
 
 > Fares, prices and deals are AI estimates, not live quotes — the deal links open real booking sites with your dates pre-filled.

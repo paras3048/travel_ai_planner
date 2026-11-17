@@ -22,6 +22,14 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "https://ollama.com")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
+# Optional free backup provider (OpenAI-compatible). If GROQ_API_KEY is set, any
+# Ollama failure (out of credits 402, rate limit 429, outage) is retried on Groq.
+# Set AI_PROVIDER=groq to use Groq first instead.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+GROQ_URL = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
+
 SYSTEM_PROMPT = """You are an expert, detail-obsessed travel planner. You must ALWAYS respond with \
 valid JSON only (no markdown fences, no explanation text outside the JSON), matching this exact schema:
 
@@ -203,27 +211,23 @@ def _headers():
     return {"Authorization": f"Bearer {OLLAMA_API_KEY}"} if OLLAMA_API_KEY else {}
 
 
-def _payload(messages, stream):
-    return {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": stream,
-        "format": "json",
-        "options": {"temperature": 0.7},
-    }
+def _payload(messages, stream, json_mode=True):
+    p = {"model": OLLAMA_MODEL, "messages": messages, "stream": stream, "options": {"temperature": 0.7}}
+    if json_mode:
+        p["format"] = "json"
+    return p
 
 
-def call_ollama(messages, timeout=180):
-    """Non-streaming chat request; returns the raw text content."""
-    resp = requests.post(f"{OLLAMA_HOST}/api/chat", json=_payload(messages, False),
+# ---- Ollama -----------------------------------------------------------------
+def _ollama_call(messages, timeout, json_mode=True):
+    resp = requests.post(f"{OLLAMA_HOST}/api/chat", json=_payload(messages, False, json_mode),
                          headers=_headers(), timeout=timeout)
     resp.raise_for_status()
     return resp.json().get("message", {}).get("content", "")
 
 
-def stream_ollama(messages, timeout=(10, 120)):
-    """Yields content chunks as the model produces them."""
-    with requests.post(f"{OLLAMA_HOST}/api/chat", json=_payload(messages, True),
+def _ollama_stream(messages, timeout, json_mode=True):
+    with requests.post(f"{OLLAMA_HOST}/api/chat", json=_payload(messages, True, json_mode),
                        headers=_headers(), stream=True, timeout=timeout) as resp:
         resp.raise_for_status()
         for line in resp.iter_lines():
@@ -240,6 +244,106 @@ def stream_ollama(messages, timeout=(10, 120)):
                 yield piece
             if chunk.get("done"):
                 break
+
+
+# ---- Groq (OpenAI-compatible) ------------------------------------------------
+def _groq_body(messages, stream, json_mode):
+    body = {"model": GROQ_MODEL, "messages": messages, "stream": stream, "temperature": 0.7}
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    return body
+
+
+def _groq_post(messages, stream, json_mode, timeout):
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    resp = requests.post(GROQ_URL, json=_groq_body(messages, stream, json_mode), headers=headers,
+                         stream=stream, timeout=timeout)
+    if resp.status_code == 400 and json_mode:
+        # Some models reject JSON mode; the prompts already demand JSON, so retry without it.
+        resp.close()
+        resp = requests.post(GROQ_URL, json=_groq_body(messages, stream, False), headers=headers,
+                             stream=stream, timeout=timeout)
+    resp.raise_for_status()
+    return resp
+
+
+def _groq_call(messages, timeout, json_mode=True):
+    resp = _groq_post(messages, False, json_mode, timeout)
+    return resp.json()["choices"][0]["message"].get("content") or ""
+
+
+def _groq_stream(messages, timeout, json_mode=True):
+    with _groq_post(messages, True, json_mode, timeout) as resp:
+        for raw in resp.iter_lines():
+            line = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else raw
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            piece = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
+            if piece:
+                yield piece
+
+
+# ---- Provider selection with automatic fallback -----------------------------
+PROVIDERS = {
+    "ollama": (_ollama_call, _ollama_stream),
+    "groq": (_groq_call, _groq_stream),
+}
+
+
+def provider_order():
+    order = ["groq", "ollama"] if AI_PROVIDER == "groq" and GROQ_API_KEY else ["ollama"]
+    if GROQ_API_KEY and "groq" not in order:
+        order.append("groq")
+    return order
+
+
+def _should_fallback(e):
+    """Fail over on quota/billing, auth, rate-limit, server errors and outages - not on bad output."""
+    if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout, RuntimeError)):
+        return True
+    if isinstance(e, requests.exceptions.HTTPError):
+        status = e.response.status_code if e.response is not None else 0
+        return status in (401, 402, 403, 404, 429) or status >= 500
+    return False
+
+
+def call_ollama(messages, timeout=180, json_mode=True):
+    """Non-streaming chat; returns raw text. (Name kept for compatibility - tries every provider.)"""
+    last = None
+    for name in provider_order():
+        try:
+            return PROVIDERS[name][0](messages, timeout, json_mode)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if not _should_fallback(e):
+                raise
+            app.logger.warning("AI provider %s failed (%s); trying next", name, e)
+    raise last
+
+
+def stream_ollama(messages, timeout=(10, 120), json_mode=True):
+    """Streams content chunks, failing over to the next provider if one fails before any output."""
+    last = None
+    for name in provider_order():
+        started = False
+        try:
+            for piece in PROVIDERS[name][1](messages, timeout, json_mode):
+                started = True
+                yield piece
+            return
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if started or not _should_fallback(e):
+                raise
+            app.logger.warning("AI provider %s failed (%s); trying next", name, e)
+    raise last
 
 
 def extract_json(text):
@@ -335,6 +439,8 @@ def health():
         "model": OLLAMA_MODEL,
         "using_cloud": OLLAMA_HOST.startswith("https://ollama.com"),
         "api_key_set": bool(OLLAMA_API_KEY),
+        "backup_provider": "groq" if GROQ_API_KEY else None,
+        "ai_available": ollama_ok or bool(GROQ_API_KEY),
     })
 
 
@@ -533,23 +639,9 @@ def chat_stream():
             msgs.append({"role": m["role"], "content": clean_str(m.get("content"), 2000)})
 
     def gen():
-        payload = {"model": OLLAMA_MODEL, "messages": msgs, "stream": True, "options": {"temperature": 0.6}}
         try:
-            with requests.post(f"{OLLAMA_HOST}/api/chat", json=payload, headers=_headers(),
-                               stream=True, timeout=(10, 120)) as resp:
-                resp.raise_for_status()
-                for line in resp.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    piece = chunk.get("message", {}).get("content", "")
-                    if piece:
-                        yield json.dumps({"type": "token", "text": piece}) + "\n"
-                    if chunk.get("done"):
-                        break
+            for piece in stream_ollama(msgs, json_mode=False):
+                yield json.dumps({"type": "token", "text": piece}) + "\n"
             yield json.dumps({"type": "done"}) + "\n"
         except Exception as e:  # noqa: BLE001
             msg, _ = friendly_error(e)
@@ -637,8 +729,8 @@ def http_error_message(e):
     if status == 404:
         return f"Model '{OLLAMA_MODEL}' was not found. Check the model name (see ollama.com for available cloud models)."
     if status == 402:
-        return ("The AI usage allowance for this site has run out for now (Ollama Cloud HTTP 402). "
-                "Please try again later. Site owner: check your balance and plan at ollama.com.")
+        return ("The AI usage allowance for this site has run out for now (HTTP 402). Please try again later. "
+                "Site owner: top up at ollama.com, or add a free GROQ_API_KEY as a backup.")
     if status == 429:
         return "Ollama Cloud rate limit reached. Wait a bit and try again, or check your usage at ollama.com."
     return f"Ollama returned an error (HTTP {status})."
